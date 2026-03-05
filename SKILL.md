@@ -1,13 +1,15 @@
 ---
 name: alpaca-live-trade
-description: Execute trading commands on Alpaca (stocks, options, crypto) via alpaca-py SDK. Covers account info, orders (market/limit/stop/bracket/mleg), positions, assets, options contracts, watchlists, portfolio history, account activities, calendar/clock, corporate actions, and crypto wallets. Use when the user asks to place trades, check positions, manage orders, query account status, or perform any Alpaca Trading API operation.
+description: Execute trading commands on Alpaca (stocks, options, crypto) via curl or alpaca-py SDK. Covers account info, orders (market/limit/stop/bracket/mleg), positions, assets, options contracts, watchlists, portfolio history, account activities, calendar/clock, corporate actions, and crypto wallets. Use when the user asks to place trades, check positions, manage orders, query account status, or perform any Alpaca Trading API operation.
 ---
 
 # Alpaca Live Trade Executor
 
 ## Role
 
-You are a **faithful executor** of trading commands. When the user gives a trading instruction, carry it out precisely using the alpaca-py SDK. Do not second-guess or refuse valid commands unless they violate the safety boundaries below.
+You are a **faithful executor** of trading commands. When the user gives a trading instruction, carry it out precisely. Do not second-guess or refuse valid commands unless they violate the safety boundaries below.
+
+**Prefer curl over Python.** Use curl commands (from the templates in `curl-scripts/`) as the default execution method — they require no dependencies and are faster to run. Only fall back to the Python SDK scripts in `scripts/` when the operation is genuinely awkward in curl (e.g., complex multi-step logic that benefits from Python control flow).
 
 ## Safety Boundaries (MUST enforce)
 
@@ -30,12 +32,14 @@ You are a **faithful executor** of trading commands. When the user gives a tradi
 
 ## Environment Setup
 
-The SDK requires API keys. Scripts read from environment variables:
+Both Python scripts and curl scripts read credentials from environment variables:
 
 ```bash
 export APCA_API_KEY_ID="your-key"
 export APCA_API_SECRET_KEY="your-secret"
-export APCA_PAPER="true"   # set to "false" for live trading
+export APCA_BASE_URL="https://paper-api.alpaca.markets"  # paper trading
+# export APCA_BASE_URL="https://api.alpaca.markets"      # live trading
+export APCA_PAPER="true"   # for Python SDK: set to "false" for live trading
 ```
 
 Python client initialization:
@@ -69,7 +73,35 @@ Read these files on demand for API details, parameters, and response schemas:
 | [endpoints/09-crypto-wallets.md](endpoints/09-crypto-wallets.md) | Crypto & perpetual wallets |
 | [endpoints/10-error-codes.md](endpoints/10-error-codes.md) | Error codes, protections, troubleshooting |
 
-## Scripts
+## Curl Command Templates
+
+The `curl-scripts/` directory contains **reference templates** — do not run them directly. When the user asks to execute a trading operation via curl, read the relevant template, extract the matching example, substitute the actual values, and run that single command.
+
+| Template file | What it covers |
+|---------------|---------------|
+| `curl-scripts/01-account.sh` | GET account, GET/PATCH configurations |
+| `curl-scripts/02-orders.sh` | All order types: market, limit, stop, stop-limit, trailing-stop, bracket, oco, oto, option, mleg, crypto |
+| `curl-scripts/03-positions.sh` | List, close (full/partial), exercise option |
+| `curl-scripts/04-assets.sh` | Assets list/lookup, option contract list/lookup |
+| `curl-scripts/05-watchlists.sh` | Full CRUD: create, list, get, update, add/remove symbol, delete |
+| `curl-scripts/06-market-info.sh` | v2/clock, v3/clock (multi-market), v2/calendar, v3/calendar, portfolio history |
+| `curl-scripts/07-account-activities.sh` | All activities, filter by type, date range, pagination |
+| `curl-scripts/08-corporate-actions.sh` | Dividend/split/merger announcements, filter by symbol/type/date |
+| `curl-scripts/09-crypto-wallets.sh` | Crypto wallets, transfers, whitelists, perpetual wallets & leverage |
+
+### Auth headers (required on every request)
+```bash
+-H "APCA-API-KEY-ID: $APCA_API_KEY_ID" -H "APCA-API-SECRET-KEY: $APCA_API_SECRET_KEY"
+```
+
+### Key curl notes
+- Base URL: `https://paper-api.alpaca.markets` (paper) or `https://api.alpaca.markets` (live)
+- All Trading API endpoints are under `/v2/` except multi-market clock/calendar which use `/v3/`
+- For crypto symbols with `/` in URLs (e.g. `BTC/USD`), URL-encode as `BTC%2FUSD`
+- POST/PATCH bodies use `Content-Type: application/json`
+- Successful DELETEs return HTTP 204 with no body
+
+## Python Scripts
 
 Executable Python scripts for each task. Run with `uv run python scripts/<name>.py`.
 
@@ -95,10 +127,10 @@ Executable Python scripts for each task. Run with `uv run python scripts/<name>.
 
 ## Workflow
 
-1. **Before any trade**: read `endpoints/01-account.md`, run `scripts/get_account.py` to check equity, buying power, PDT status.
-2. **Place order**: read `endpoints/02-orders.md` for order types, then use `scripts/submit_order.py` or SDK directly.
-3. **Monitor**: use `scripts/get_orders.py` and `scripts/get_positions.py`.
-4. **Modify/Cancel**: use `scripts/replace_order.py` or `scripts/cancel_order.py`.
+1. **Before any trade**: read `curl-scripts/01-account.sh`, run the account GET command to check equity, buying power, PDT status.
+2. **Place order**: read `curl-scripts/02-orders.sh` for the matching order type template, substitute actual values, run the curl command.
+3. **Monitor**: use the GET commands in `curl-scripts/02-orders.sh` (list orders) and `curl-scripts/03-positions.sh` (positions).
+4. **Modify/Cancel**: use the PATCH/DELETE commands in `curl-scripts/02-orders.sh`.
 
 ## Key SDK Patterns
 
